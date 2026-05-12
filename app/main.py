@@ -116,7 +116,7 @@ def create_warehouse(data: WarehouseCreate):
         conn.close()
 
 @app.get("/warehouses")
-def list_warehouses():
+def list_warehouses(user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM warehouses")
@@ -142,7 +142,7 @@ def create_product(data: ProductCreate):
         conn.close()
 
 @app.get("/products")
-def list_products():
+def list_products(user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM products")
