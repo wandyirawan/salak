@@ -1,10 +1,14 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import logging
+import jwt
+import requests
+from jwt.algorithms import RSAAlgorithm
 
 load_dotenv()
 
@@ -12,6 +16,34 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Salak Inventory", description="Snake fruit inventory (Python/Granian)")
+
+# JWT Setup
+security = HTTPBearer()
+_jwks_cache = None
+
+def get_jwks():
+    global _jwks_cache
+    if not _jwks_cache:
+        url = os.getenv("MANGOSTEEN_JWKS_URL")
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        _jwks_cache = resp.json()
+    return _jwks_cache
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        jwks = get_jwks()
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header["kid"]
+        key = next((k for k in jwks["keys"] if k["kid"] == kid), None)
+        if not key:
+            raise HTTPException(status_code=401, detail="Invalid token key")
+        public_key = RSAAlgorithm.from_jwk(key)
+        payload = jwt.decode(token, public_key, algorithms=["RS256"], audience="mangosteen")
+        return payload
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 def get_db():
     return psycopg2.connect(os.getenv("DATABASE_URL"), cursor_factory=RealDictCursor)
@@ -120,7 +152,7 @@ def list_products():
 
 # Stock Endpoints
 @app.post("/stock-in")
-def stock_in(data: StockIn):
+def stock_in(data: StockIn, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -136,7 +168,7 @@ def stock_in(data: StockIn):
         conn.close()
 
 @app.post("/stock-out")
-def stock_out(data: StockOut):
+def stock_out(data: StockOut, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -170,6 +202,24 @@ def check_inventory(product_id: int = None, warehouse_id: int = None):
         cur.execute("SELECT * FROM inventory WHERE product_id=%s", (product_id,))
     else:
         cur.execute("SELECT * FROM inventory")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+@app.get("/inventory/check")
+def check_by_sku(sku: str, warehouse_id: int = None, user: dict = Depends(verify_token)):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM products WHERE sku=%s", (sku,))
+    prod = cur.fetchone()
+    if not prod:
+        raise HTTPException(status_code=404, detail="SKU not found")
+    
+    if warehouse_id:
+        cur.execute("SELECT * FROM inventory WHERE product_id=%s AND warehouse_id=%s", (prod['id'], warehouse_id))
+    else:
+        cur.execute("SELECT * FROM inventory WHERE product_id=%s", (prod['id'],))
+    
     rows = cur.fetchall()
     conn.close()
     return rows
