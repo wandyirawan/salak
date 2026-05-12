@@ -75,19 +75,19 @@ MANGOSTEEN_JWKS_URL=http://localhost:4000/api/.well-known/jwks.json
 
 ## API Endpoints
 
-### Public (No Auth)
-- `GET /health` - Health check
-- `GET /db-check` - Database connection check
-- `GET /warehouses` - List warehouses
-- `GET /products` - List products
-- `GET /inventory` - Check inventory (all/by product/warehouse)
-
 ### Protected (Requires JWT from Mangosteen)
+- `GET /warehouses` - List warehouses
 - `POST /warehouses` - Create warehouse
+- `GET /products` - List products
 - `POST /products` - Create product
 - `POST /stock-in` - Add stock (delta positive)
 - `POST /stock-out` - Remove stock (delta negative, checks real_qty)
+- `GET /inventory` - Check inventory (all/by product/warehouse)
 - `GET /inventory/check?sku=X` - Check stock by SKU
+
+### Public (No Auth)
+- `GET /health` - Health check
+- `GET /db-check` - Database connection check
 
 ### Example: Stock In
 
