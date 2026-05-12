@@ -27,6 +27,20 @@ class WarehouseCreate(BaseModel):
     name: str
     location: str = ""
 
+class StockIn(BaseModel):
+    product_id: int
+    warehouse_id: int
+    quantity: float
+    reference_id: str = ""
+    notes: str = ""
+
+class StockOut(BaseModel):
+    product_id: int
+    warehouse_id: int
+    quantity: float
+    reference_id: str = ""
+    notes: str = ""
+
 @app.on_event("startup")
 def startup():
     logger.info("Running migrations...")
@@ -100,6 +114,62 @@ def list_products():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM products")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+# Stock Endpoints
+@app.post("/stock-in")
+def stock_in(data: StockIn):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO inventory_transactions (product_id, warehouse_id, delta_qty, reference_id, notes) VALUES (%s, %s, %s, %s, %s) RETURNING *",
+                    (data.product_id, data.warehouse_id, data.quantity, data.reference_id, data.notes))
+        row = cur.fetchone()
+        conn.commit()
+        return row
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.post("/stock-out")
+def stock_out(data: StockOut):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Check real_qty
+        cur.execute("SELECT real_qty FROM inventory WHERE product_id=%s AND warehouse_id=%s", 
+                    (data.product_id, data.warehouse_id))
+        row = cur.fetchone()
+        if not row or row['real_qty'] < data.quantity:
+            raise HTTPException(status_code=400, detail="Insufficient stock")
+        
+        cur.execute("INSERT INTO inventory_transactions (product_id, warehouse_id, delta_qty, reference_id, notes) VALUES (%s, %s, %s, %s, %s) RETURNING *",
+                    (data.product_id, data.warehouse_id, -abs(data.quantity), data.reference_id, data.notes))
+        row = cur.fetchone()
+        conn.commit()
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.get("/inventory")
+def check_inventory(product_id: int = None, warehouse_id: int = None):
+    conn = get_db()
+    cur = conn.cursor()
+    if product_id and warehouse_id:
+        cur.execute("SELECT * FROM inventory WHERE product_id=%s AND warehouse_id=%s", (product_id, warehouse_id))
+    elif product_id:
+        cur.execute("SELECT * FROM inventory WHERE product_id=%s", (product_id,))
+    else:
+        cur.execute("SELECT * FROM inventory")
     rows = cur.fetchall()
     conn.close()
     return rows
