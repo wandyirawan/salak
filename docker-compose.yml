@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:16
+    container_name: salak-postgres
+    environment:
+      POSTGRES_USER: salak
+      POSTGRES_PASSWORD: salaksecret
+      POSTGRES_DB: salak
+    ports:
+      - "5433:5432"
+    volumes:
+      - salak_data:/var/lib/postgresql/data
+volumes:
+  salak_data:
