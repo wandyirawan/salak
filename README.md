@@ -1,10 +1,11 @@
-# Salak Inventory
+# Salak - Product Service
 
-Snake fruit inventory service (Python/FastAPI + Granian) for Pomegranate ecosystem.
+Snake fruit product & inventory service (Python/FastAPI + Granian) for Pomegranate ecosystem.
+Single source of truth for products, pricing, categories, and stock.
 
 ## Overview
 
-Salak is a lightweight inventory management service using:
+Salak is the central Product Service using:
 - **FastAPI** (Python web framework)
 - **Granian** (Rust-powered ASGI server)
 - **PostgreSQL** (with database triggers for stock consistency)
@@ -13,9 +14,9 @@ Salak is a lightweight inventory management service using:
 ## Architecture
 
 ```
-Pomelo (Ecommerce) / HR App
-    ↓ (JWT Token)
-Salak (Inventory Service)
+Kelapa (Ecommerce) / Pome (Backoffice)
+    ↓ (JWT Token via Mangosteen)
+Salak (Product Service)
     ↓ (INSERT to inventory_transactions)
 PostgreSQL Trigger → Auto-update inventory (real_qty)
 ```
@@ -23,10 +24,10 @@ PostgreSQL Trigger → Auto-update inventory (real_qty)
 ### Key Concept: Trigger-Based Stock Updates
 
 - **History (Delta):** `inventory_transactions` table stores stock changes (+5, -3)
-- **State (Real):** `inventory` table stores current stock (real_qty)
+- **State (Real):** `inventory` table stores current stock (`real_qty`)
 - **Trigger:** Database trigger automatically updates `real_qty` when new transaction is inserted
 
-This ensures **ACID compliance** - stock updates are atomic and consistent.
+This ensures **ACID compliance** — stock updates are atomic and consistent.
 
 ## Prerequisites
 
@@ -45,14 +46,14 @@ cd salak
 uv sync
 ```
 
-### 2. Start Database
+### 2. Start
 
 ```bash
 make dev
 ```
 
 This command:
-- Starts PostgreSQL container (port 5433)
+- Starts central infra (PostgreSQL :5433 + Minio :9000)
 - Runs migrations automatically
 - Starts Salak with Granian (port 8000)
 
@@ -71,77 +72,129 @@ Create `.env` file:
 DATABASE_URL=postgresql://salak:salaksecret@localhost:5433/salak
 MANGOSTEEN_URL=http://localhost:4000
 MANGOSTEEN_JWKS_URL=http://localhost:4000/api/.well-known/jwks.json
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=pomegranate
+MINIO_SECRET_KEY=pomegranate123
 ```
 
 ## API Endpoints
 
-### Protected (Requires JWT from Mangosteen)
-- `GET /warehouses` - List warehouses
-- `POST /warehouses` - Create warehouse
-- `GET /products` - List products
-- `POST /products` - Create product
-- `POST /stock-in` - Add stock (delta positive)
-- `POST /stock-out` - Remove stock (delta negative, checks real_qty)
-- `GET /inventory` - Check inventory (all/by product/warehouse)
-- `GET /inventory/check?sku=X` - Check stock by SKU
+All endpoints require JWT from Mangosteen except `/health`.
+
+### Protected (Requires JWT)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/db-check` | Database connection check |
+| GET | `/warehouses` | List warehouses |
+| POST | `/warehouses` | Create warehouse |
+| GET | `/products` | List products (?category=X&search=Y) |
+| POST | `/products` | Create product |
+| GET | `/products/{id}` | Get product by ID |
+| PUT | `/products/{id}` | Update product |
+| GET | `/products/template` | Download Excel template for bulk upload |
+| POST | `/products/bulk-upload` | Upload Excel → Minio → parse → bulk insert |
+| POST | `/stock-in` | Add stock (delta positive) |
+| POST | `/stock-out` | Remove stock (delta negative, checks real_qty) |
+| GET | `/inventory` | Check inventory (?sku=X / ?product_id=Y / ?warehouse_id=Z) |
+| GET | `/inventory/transactions` | Stock change history |
+| GET | `/categories` | List product categories |
+| POST | `/categories` | Create category |
 
 ### Public (No Auth)
-- `GET /health` - Health check
-- `GET /db-check` - Database connection check
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
 
 ### Example: Stock In
 
 ```bash
 curl -X POST http://localhost:8000/stock-in \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer <JWT>" \
   -H "Content-Type: application/json" \
   -d '{"product_id": 1, "warehouse_id": 1, "quantity": 10, "reference_id": "PO-001"}'
+```
+
+### Example: Bulk Upload
+
+```bash
+curl -X POST http://localhost:8000/products/bulk-upload \
+  -H "Authorization: Bearer <JWT>" \
+  -F "file=@products.xlsx"
+```
+
+### Example: Check Inventory by SKU
+
+```bash
+curl -H "Authorization: Bearer <JWT>" \
+  http://localhost:8000/inventory?sku=PRD-001
 ```
 
 ## Database Schema
 
 ### Tables
-- `products` - Master product data (SKU, name, attributes JSONB)
-- `warehouses` - Warehouse locations
-- `inventory` - Current stock per product/warehouse (real_qty)
-- `inventory_transactions` - Stock change history (delta_qty)
-- `schema_migrations` - Migration tracking
+
+| Table | Purpose |
+|-------|---------|
+| `products` | Master product data (SKU, name, price, cost_price, description, category, images, attributes) |
+| `categories` | Product taxonomy |
+| `warehouses` | Warehouse locations |
+| `inventory` | Current stock per product/warehouse (`real_qty`) |
+| `inventory_transactions` | Stock change history (`delta_qty`) with trigger |
+| `schema_migrations` | Migration tracking |
 
 ### Trigger Logic
 
 ```sql
 -- When INSERT to inventory_transactions:
--- 1. Insert/Update inventory table
+-- 1. Upsert inventory table (product_id + warehouse_id)
 -- 2. real_qty = real_qty + delta_qty
--- 3. Handle conflict (ON CONFLICT) for existing product/warehouse
+-- 3. Handle ON CONFLICT for existing product/warehouse combos
 ```
 
 ## Development
 
-### Run Migrations Manually
+### Migrations
+
+Folder-based SQL migrations (no Alembic/ORM):
 
 ```bash
-uv run python migrate.py
+make migrate          # Apply unapplied migrations
 ```
 
-### Stop Services
+Migration files: `migrations/001_init.sql`, `migrations/002_add_product_fields.sql`
 
-```bash
-make stop
+### Makefile Commands
+
+| Command | Description |
+|---------|-------------|
+| `make dev` | Start infra + migrate + Granian |
+| `make stop` | Stop central infra containers |
+| `make db-reset` | Restart Postgres (NO data loss) |
+| `make db-nuke` | Destroy all data (requires YES confirmation) |
+| `make clean` | Remove build artifacts |
+
+### Project Structure
+
 ```
-
-### Reset Database
-
-```bash
-make db-reset
+salak/
+├── app/
+│   ├── main.py          # FastAPI app, routes, auth, DB
+│   └── bulk.py           # Bulk upload (Excel → Minio → DB)
+├── migrations/           # SQL migration files
+├── migrate.py            # Custom migration runner
+├── Makefile
+├── pyproject.toml
+└── .env
 ```
 
 ## Integration with Pomegranate Ecosystem
 
-- **Mangosteen (Go):** Provides JWT authentication (JWKS endpoint)
-- **Granate (Rust):** CMS that may reference inventory data
-- **Pomelo (Elixir):** Ecommerce that calls `/stock-out` on orders
-- **HR App (Go):** May call `/stock-out` for asset management
+- **Mangosteen (Go):** JWT authentication via JWKS endpoint
+- **Granate (Rust):** CMS referencing product data
+- **Kelapa (Elixir + Elm):** Ecommerce storefront & admin — uses service token to read/write products/stock
+- **Pome (Bun + HTMX):** Central backoffice — bulk operations, warehouse management
 
 ## License
 
@@ -149,4 +202,4 @@ MIT
 
 ---
 
-Part of **Pomegranate** - Lightweight ERP ecosystem.
+Part of **Salad Buah** — Pick the fruits you need. Skip the rest.
