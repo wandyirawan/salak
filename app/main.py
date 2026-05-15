@@ -17,6 +17,16 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Salak Inventory", description="Snake fruit inventory (Python/Granian)")
 
+# CORS — allow Pome (Bun/Elysia) frontend
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4021", "http://127.0.0.1:4021"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # JWT Setup
 security = HTTPBearer()
 _jwks_cache = None
@@ -53,7 +63,29 @@ class ProductCreate(BaseModel):
     sku: str
     name: str
     unit: str = "pcs"
+    price: float = 0
+    cost_price: float = 0
+    description: str = ""
+    category_id: int = None
+    is_active: bool = True
+    images: list = []
     attributes: dict = {}
+
+class ProductUpdate(BaseModel):
+    name: str = None
+    unit: str = None
+    price: float = None
+    cost_price: float = None
+    description: str = None
+    category_id: int = None
+    is_active: bool = None
+    images: list = None
+    attributes: dict = None
+
+class CategoryCreate(BaseModel):
+    name: str
+    slug: str = None
+    parent_id: int = None
 
 class WarehouseCreate(BaseModel):
     name: str
@@ -130,8 +162,13 @@ def create_product(data: ProductCreate):
     conn = get_db()
     cur = conn.cursor()
     try:
-        cur.execute("INSERT INTO products (sku, name, unit, attributes) VALUES (%s, %s, %s, %s) RETURNING *",
-                    (data.sku, data.name, data.unit, psycopg2.extras.Json(data.attributes)))
+        cur.execute("""
+            INSERT INTO products (sku, name, unit, price, cost_price, description, 
+                                  category_id, is_active, images, attributes) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *
+        """, (data.sku, data.name, data.unit, data.price, data.cost_price, data.description,
+              data.category_id, data.is_active, psycopg2.extras.Json(data.images),
+              psycopg2.extras.Json(data.attributes)))
         row = cur.fetchone()
         conn.commit()
         return row
@@ -141,14 +178,58 @@ def create_product(data: ProductCreate):
     finally:
         conn.close()
 
-@app.get("/products")
-def list_products(user: dict = Depends(verify_token)):
+@app.put("/products/{product_id}")
+def update_product(product_id: int, data: ProductUpdate):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM products")
+    try:
+        updates = {k: v for k, v in data.dict().items() if v is not None}
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        set_clause = ", ".join(f"{k} = %s" for k in updates)
+        vals = list(updates.values()) + [product_id]
+        cur.execute(f"UPDATE products SET {set_clause} WHERE id = %s RETURNING *", vals)
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Product not found")
+        conn.commit()
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.get("/products")
+def list_products(category_id: int = None, search: str = None):
+    conn = get_db()
+    cur = conn.cursor()
+    q = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_active = TRUE"
+    params = []
+    if category_id:
+        q += " AND p.category_id = %s"
+        params.append(category_id)
+    if search:
+        q += " AND (p.name ILIKE %s OR p.sku ILIKE %s)"
+        params.extend([f"%{search}%", f"%{search}%"])
+    q += " ORDER BY p.name"
+    cur.execute(q, params)
     rows = cur.fetchall()
     conn.close()
     return rows
+
+@app.get("/products/{product_id}")
+def get_product(product_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id=%s", (product_id,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return row
 
 # Stock Endpoints
 @app.post("/stock-in")
@@ -193,9 +274,15 @@ def stock_out(data: StockOut, user: dict = Depends(verify_token)):
         conn.close()
 
 @app.get("/inventory")
-def check_inventory(product_id: int = None, warehouse_id: int = None):
+def check_inventory(product_id: int = None, warehouse_id: int = None, sku: str = None):
     conn = get_db()
     cur = conn.cursor()
+    if sku:
+        cur.execute("SELECT id FROM products WHERE sku=%s", (sku,))
+        prod = cur.fetchone()
+        if not prod:
+            raise HTTPException(status_code=404, detail="SKU not found")
+        product_id = prod['id']
     if product_id and warehouse_id:
         cur.execute("SELECT * FROM inventory WHERE product_id=%s AND warehouse_id=%s", (product_id, warehouse_id))
     elif product_id:
@@ -206,24 +293,55 @@ def check_inventory(product_id: int = None, warehouse_id: int = None):
     conn.close()
     return rows
 
-@app.get("/inventory/check")
-def check_by_sku(sku: str, warehouse_id: int = None, user: dict = Depends(verify_token)):
+@app.get("/inventory/transactions")
+def list_transactions(product_id: int = None, limit: int = 50, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id FROM products WHERE sku=%s", (sku,))
-    prod = cur.fetchone()
-    if not prod:
-        raise HTTPException(status_code=404, detail="SKU not found")
-    
-    if warehouse_id:
-        cur.execute("SELECT * FROM inventory WHERE product_id=%s AND warehouse_id=%s", (prod['id'], warehouse_id))
-    else:
-        cur.execute("SELECT * FROM inventory WHERE product_id=%s", (prod['id'],))
-    
+    q = "SELECT t.*, p.name as product_name, p.sku FROM inventory_transactions t LEFT JOIN products p ON t.product_id = p.id"
+    params = []
+    if product_id:
+        q += " WHERE t.product_id = %s"
+        params.append(product_id)
+    q += " ORDER BY t.created_at DESC LIMIT %s"
+    params.append(limit)
+    cur.execute(q, params)
     rows = cur.fetchall()
     conn.close()
     return rows
 
+# Category Endpoints
+@app.get("/categories")
+def list_categories():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM categories ORDER BY name")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+@app.post("/categories")
+def create_category(data: CategoryCreate):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        slug = data.slug or data.name.lower().replace(" ", "-")
+        cur.execute(
+            "INSERT INTO categories (name, slug, parent_id) VALUES (%s, %s, %s) RETURNING *",
+            (data.name, slug, data.parent_id))
+        row = cur.fetchone()
+        conn.commit()
+        return row
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     import granian
     granian.run("app.main:app", host="0.0.0.0", port=8000, interface="asgi")
+
+
+# Register routers
+from app.bulk import router as bulk_router
+app.include_router(bulk_router)
