@@ -50,7 +50,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         if not key:
             raise HTTPException(status_code=401, detail="Invalid token key")
         public_key = RSAAlgorithm.from_jwk(key)
-        payload = jwt.decode(token, public_key, algorithms=["RS256"], audience="mangosteen")
+        payload = jwt.decode(token, public_key, algorithms=["RS256"], options={"verify_aud": False})
         return payload
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
