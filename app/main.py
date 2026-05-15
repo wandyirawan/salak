@@ -120,7 +120,7 @@ def health():
     return {"status": "ok", "service": "salak"}
 
 @app.get("/db-check")
-def db_check():
+def db_check(user: dict = Depends(verify_token)):
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -132,7 +132,7 @@ def db_check():
 
 # Warehouse Endpoints
 @app.post("/warehouses")
-def create_warehouse(data: WarehouseCreate):
+def create_warehouse(data: WarehouseCreate, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -158,7 +158,7 @@ def list_warehouses(user: dict = Depends(verify_token)):
 
 # Product Endpoints
 @app.post("/products")
-def create_product(data: ProductCreate):
+def create_product(data: ProductCreate, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -179,7 +179,7 @@ def create_product(data: ProductCreate):
         conn.close()
 
 @app.put("/products/{product_id}")
-def update_product(product_id: int, data: ProductUpdate):
+def update_product(product_id: int, data: ProductUpdate, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -203,7 +203,7 @@ def update_product(product_id: int, data: ProductUpdate):
         conn.close()
 
 @app.get("/products")
-def list_products(category_id: int = None, search: str = None):
+def list_products(category_id: int = None, search: str = None, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     q = "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_active = TRUE"
@@ -221,7 +221,7 @@ def list_products(category_id: int = None, search: str = None):
     return rows
 
 @app.get("/products/{product_id}")
-def get_product(product_id: int):
+def get_product(product_id: int, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id=%s", (product_id,))
@@ -274,7 +274,7 @@ def stock_out(data: StockOut, user: dict = Depends(verify_token)):
         conn.close()
 
 @app.get("/inventory")
-def check_inventory(product_id: int = None, warehouse_id: int = None, sku: str = None):
+def check_inventory(product_id: int = None, warehouse_id: int = None, sku: str = None, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     if sku:
@@ -311,7 +311,7 @@ def list_transactions(product_id: int = None, limit: int = 50, user: dict = Depe
 
 # Category Endpoints
 @app.get("/categories")
-def list_categories():
+def list_categories(user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM categories ORDER BY name")
@@ -320,7 +320,7 @@ def list_categories():
     return rows
 
 @app.post("/categories")
-def create_category(data: CategoryCreate):
+def create_category(data: CategoryCreate, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     try:
