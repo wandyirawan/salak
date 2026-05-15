@@ -106,6 +106,7 @@ All endpoints require JWT from Mangosteen except `/health`.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check |
+| POST | `/auth/login` | Proxy login to Mangosteen → returns JWT |
 
 ### Example: Stock In
 
@@ -195,6 +196,7 @@ salak/
 - **Granate (Rust):** CMS referencing product data
 - **Kelapa (Elixir + Elm):** Ecommerce storefront & admin — uses service token to read/write products/stock
 - **Pome (Bun + HTMX):** Central backoffice — bulk operations, warehouse management
+- **Duwet (Rust + Ratatui):** Warehouse TUI — login via Salak `/auth/login`, stock-in/out operations
 
 ## License
 

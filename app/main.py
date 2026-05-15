@@ -119,6 +119,27 @@ def startup():
 def health():
     return {"status": "ok", "service": "salak"}
 
+# Auth proxy to Mangosteen
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/auth/login")
+def proxy_login(data: LoginRequest):
+    """Proxy login to Mangosteen, return JWT for subsequent Salak API calls."""
+    try:
+        mangosteen = os.getenv("MANGOSTEEN_URL", "http://localhost:4000")
+        resp = requests.post(
+            f"{mangosteen}/api/auth/login",
+            json={"email": data.email, "password": data.password},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        return resp.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"Mangosteen unreachable: {e}")
+
 @app.get("/db-check")
 def db_check(user: dict = Depends(verify_token)):
     try:
