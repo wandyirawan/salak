@@ -88,18 +88,25 @@ All endpoints require JWT from Mangosteen except `/health`.
 | GET | `/db-check` | Database connection check |
 | GET | `/warehouses` | List warehouses |
 | POST | `/warehouses` | Create warehouse |
+| GET | `/warehouses/{id}` | Get warehouse by ID |
+| PUT | `/warehouses/{id}` | Update warehouse |
+| DELETE | `/warehouses/{id}` | Delete warehouse (409 if has inventory) |
 | GET | `/products` | List products (?category=X&search=Y) |
 | POST | `/products` | Create product |
 | GET | `/products/{id}` | Get product by ID |
 | PUT | `/products/{id}` | Update product |
+| DELETE | `/products/{id}` | Delete product (409 if has inventory) |
 | GET | `/products/template` | Download Excel template for bulk upload |
 | POST | `/products/bulk-upload` | Upload Excel → Minio → parse → bulk insert |
 | POST | `/stock-in` | Add stock (delta positive) |
 | POST | `/stock-out` | Remove stock (delta negative, checks real_qty) |
 | GET | `/inventory` | Check inventory (?sku=X / ?product_id=Y / ?warehouse_id=Z) |
-| GET | `/inventory/transactions` | Stock change history |
+| GET | `/inventory/transactions` | Stock change history (?product_id=X&limit=N) |
 | GET | `/categories` | List product categories |
 | POST | `/categories` | Create category |
+| GET | `/categories/{id}` | Get category by ID |
+| PUT | `/categories/{id}` | Update category |
+| DELETE | `/categories/{id}` | Delete category (409 if has products) |
 
 ### Public (No Auth)
 
@@ -164,7 +171,7 @@ Folder-based SQL migrations (no Alembic/ORM):
 make migrate          # Apply unapplied migrations
 ```
 
-Migration files: `migrations/001_init.sql`, `migrations/002_add_product_fields.sql`
+Migration files: `migrations/001_init.sql`, `migrations/002_add_product_fields.sql`, `migrations/003_enforce_category_fk.sql`
 
 ### Makefile Commands
 
