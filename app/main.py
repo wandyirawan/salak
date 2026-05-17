@@ -87,6 +87,11 @@ class CategoryCreate(BaseModel):
     slug: str = None
     parent_id: int = None
 
+class CategoryUpdate(BaseModel):
+    name: str = None
+    slug: str = None
+    parent_id: int = None
+
 class WarehouseCreate(BaseModel):
     name: str
     location: str = ""
@@ -216,6 +221,28 @@ def update_warehouse(warehouse_id: int, data: WarehouseUpdate, user: dict = Depe
     finally:
         conn.close()
 
+@app.delete("/warehouses/{warehouse_id}")
+def delete_warehouse(warehouse_id: int, user: dict = Depends(verify_token)):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM warehouses WHERE id = %s RETURNING *", (warehouse_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+        conn.commit()
+        return {"deleted": row["id"], "name": row["name"]}
+    except HTTPException:
+        raise
+    except psycopg2.errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Cannot delete: warehouse has inventory or transaction records")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
 # Product Endpoints
 @app.post("/products")
 def create_product(data: ProductCreate, user: dict = Depends(verify_token)):
@@ -290,6 +317,28 @@ def get_product(product_id: int, user: dict = Depends(verify_token)):
     if not row:
         raise HTTPException(status_code=404, detail="Product not found")
     return row
+
+@app.delete("/products/{product_id}")
+def delete_product(product_id: int, user: dict = Depends(verify_token)):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM products WHERE id = %s RETURNING *", (product_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Product not found")
+        conn.commit()
+        return {"deleted": row["id"], "sku": row["sku"]}
+    except HTTPException:
+        raise
+    except psycopg2.errors.ForeignKeyViolation as e:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Cannot delete: product has inventory or transaction records")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 # Stock Endpoints
 @app.post("/stock-in")
@@ -391,6 +440,41 @@ def create_category(data: CategoryCreate, user: dict = Depends(verify_token)):
         row = cur.fetchone()
         conn.commit()
         return row
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.get("/categories/{category_id}")
+def get_category(category_id: int, user: dict = Depends(verify_token)):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM categories WHERE id=%s", (category_id,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return row
+
+@app.put("/categories/{category_id}")
+def update_category(category_id: int, data: CategoryUpdate, user: dict = Depends(verify_token)):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        updates = {k: v for k, v in data.dict().items() if v is not None}
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        set_clause = ", ".join(f"{k} = %s" for k in updates)
+        vals = list(updates.values()) + [category_id]
+        cur.execute(f"UPDATE categories SET {set_clause} WHERE id = %s RETURNING *", vals)
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Category not found")
+        conn.commit()
+        return row
+    except HTTPException:
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
