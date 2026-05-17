@@ -486,18 +486,6 @@ def delete_category(category_id: int, user: dict = Depends(verify_token)):
     conn = get_db()
     cur = conn.cursor()
     try:
-        # Check if products still reference this category
-        cur.execute("SELECT COUNT(*) as cnt FROM products WHERE category_id = %s", (category_id,))
-        cnt = cur.fetchone()["cnt"]
-        if cnt > 0:
-            raise HTTPException(status_code=409, detail=f"Cannot delete: {cnt} product(s) still reference this category")
-
-        # Check if sub-categories reference this category
-        cur.execute("SELECT COUNT(*) as cnt FROM categories WHERE parent_id = %s", (category_id,))
-        cnt = cur.fetchone()["cnt"]
-        if cnt > 0:
-            raise HTTPException(status_code=409, detail=f"Cannot delete: {cnt} sub-category(ies) still reference this category")
-
         cur.execute("DELETE FROM categories WHERE id = %s RETURNING *", (category_id,))
         row = cur.fetchone()
         if not row:
@@ -506,6 +494,9 @@ def delete_category(category_id: int, user: dict = Depends(verify_token)):
         return {"deleted": row["id"], "name": row["name"]}
     except HTTPException:
         raise
+    except psycopg2.errors.ForeignKeyViolation:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Cannot delete: products or sub-categories still reference this category")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
