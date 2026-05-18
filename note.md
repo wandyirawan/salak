@@ -3,24 +3,11 @@
 ## Goal
 Search feature for Salak inventory app on potato VPS (2 CPU, 1-2GB RAM) that scales to EC2 mid-tier later.
 
-## Current Approach: PostgreSQL ILIKE (Phase 1)
+## Current Approach: PostgreSQL ILIKE + GIN Index (Phase 1) ✅
 
-For current scale (hundreds of products, 1-2 operators):
-
-```sql
--- GIN trigram index (pg_trgm extension)
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX IF NOT EXISTS idx_products_name_sku ON products
-  USING GIN (name gin_trgm_ops, sku gin_trgm_ops);
-
--- Query
-SELECT * FROM products
-  WHERE name ILIKE '%search%' OR sku ILIKE '%search%';
-```
-
-- **~2ms** at current scale
-- **Zero** extra services, memory, or deps
-- **Zero** sync lag (direct PG query)
+✅ Applied via migration `004_add_search_index.sql`
+✅ GIN trigram index on `products.name` and `products.sku`
+✅ `ILIKE '%search%'` — no extra services, zero extra RAM
 
 ## Future: SQLite FTS5 (Phase 2)
 
@@ -102,6 +89,6 @@ config.py              # MEILISEARCH_ENABLED reader
 
 | Date | Decision |
 |------|----------|
-| 2026-05-17 | Phase 1: PostgreSQL ILIKE + GIN trigram index. No extra deps. |
+| 2026-05-17 | Phase 1: PostgreSQL ILIKE + GIN trigram index. Migration 004 applied. ✅ |
 | TBD | Phase 2: SQLite FTS5 + nano-queue when products > 10k |
 | TBD | Phase 3: Meilisearch on EC2 |

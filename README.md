@@ -171,7 +171,7 @@ Folder-based SQL migrations (no Alembic/ORM):
 make migrate          # Apply unapplied migrations
 ```
 
-Migration files: `migrations/001_init.sql`, `migrations/002_add_product_fields.sql`, `migrations/003_enforce_category_fk.sql`
+Migration files: `migrations/001_init.sql`, `migrations/002_add_product_fields.sql`, `migrations/003_enforce_category_fk.sql`, `migrations/004_add_search_index.sql`
 
 ### Makefile Commands
 
