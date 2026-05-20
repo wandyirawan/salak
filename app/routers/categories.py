@@ -4,7 +4,7 @@ from ..db import get_db
 from ..auth import verify_token
 from ..schemas.categories import CategoryCreate, CategoryUpdate
 
-router = APIRouter(prefix="/categories", tags=["categories"])
+router = APIRouter(tags=["categories"])
 
 @router.get("")
 def list_categories(user: dict = Depends(verify_token)):

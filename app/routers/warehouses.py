@@ -4,7 +4,7 @@ from ..db import get_db
 from ..auth import verify_token
 from ..schemas.warehouses import WarehouseCreate, WarehouseUpdate
 
-router = APIRouter(prefix="/warehouses", tags=["warehouses"])
+router = APIRouter(tags=["warehouses"])
 
 @router.post("")
 def create_warehouse(data: WarehouseCreate, user: dict = Depends(verify_token)):

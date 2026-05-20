@@ -4,7 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from .config import settings
-from .routers import health, auth, warehouses, categories, products, inventory, bulk
+from .routers import (
+    health_router,
+    auth_router,
+    warehouses_router,
+    categories_router,
+    products_router,
+    inventory_router,
+    bulk_router,
+)
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -24,14 +32,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(health.router, tags=["health"])
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(warehouses.router, prefix="/warehouses", tags=["warehouses"])
-app.include_router(categories.router, prefix="/categories", tags=["categories"])
-app.include_router(products.router, prefix="/products", tags=["products"])
-app.include_router(inventory.router, tags=["inventory"])
-app.include_router(bulk.router, tags=["products"])  # bulk shares /products prefix
+# Include routers with path prefixes
+app.include_router(health_router)
+app.include_router(auth_router)  # /auth/login (prefix handled inside router)
+app.include_router(warehouses_router, prefix="/warehouses")
+app.include_router(categories_router, prefix="/categories")
+app.include_router(products_router, prefix="/products")
+app.include_router(inventory_router)  # stock-in, stock-out, inventory, transactions
+app.include_router(bulk_router)  # /products/template, /products/bulk-upload
 
 # Startup: run migrations
 @app.on_event("startup")

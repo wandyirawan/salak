@@ -17,7 +17,7 @@ from ..auth import verify_token
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/products", tags=["Bulk Upload"])
+router = APIRouter(tags=["products"])
 
 def get_minio() -> Minio:
     return Minio(

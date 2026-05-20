@@ -5,7 +5,7 @@ from ..db import get_db
 from ..auth import verify_token
 from ..schemas.products import ProductCreate, ProductUpdate
 
-router = APIRouter(prefix="/products", tags=["products"])
+router = APIRouter(tags=["products"])
 
 @router.post("")
 def create_product(data: ProductCreate, user: dict = Depends(verify_token)):
