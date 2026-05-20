@@ -39,7 +39,7 @@ app.include_router(warehouses_router, prefix="/warehouses")
 app.include_router(categories_router, prefix="/categories")
 app.include_router(products_router, prefix="/products")
 app.include_router(inventory_router)  # stock-in, stock-out, inventory, transactions
-app.include_router(bulk_router)  # /products/template, /products/bulk-upload
+app.include_router(bulk_router, prefix="/products")  # /products/template, /products/bulk-upload
 
 # Startup: run migrations
 @app.on_event("startup")
