@@ -56,6 +56,17 @@ def get_product(product_id: int, user: dict = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Product not found")
     return row
 
+@router.get("/{product_id}/cogs")
+def get_product_cogs(product_id: int, user: dict = Depends(verify_token)):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id as product_id, sku, cost_price FROM products WHERE id=%s", (product_id,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return row
+
 @router.put("/{product_id}")
 def update_product(product_id: int, data: ProductUpdate, user: dict = Depends(verify_token)):
     conn = get_db()
