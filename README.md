@@ -101,12 +101,12 @@ make dev
 This command:
 - Starts central infra (PostgreSQL :5433 + Minio :9000)
 - Runs migrations automatically
-- Starts Salak with Granian (port 8000)
+- Starts Salak with Granian (port 4002)
 
 ### 3. Verify
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:4002/health
 # {"status": "ok", "service": "salak"}
 ```
 
@@ -115,10 +115,10 @@ curl http://localhost:8000/health
 Create `.env` file:
 
 ```env
-PORT=8000
+PORT=4002
 DATABASE_URL=postgresql://postgres:postgres@localhost:5433/salak
-MANGOSTEEN_URL=http://localhost:4000
-MANGOSTEEN_JWKS_URL=http://localhost:4000/api/.well-known/jwks.json
+MANGOSTEEN_URL=http://localhost:4001
+MANGOSTEEN_JWKS_URL=http://localhost:4001/api/.well-known/jwks.json
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=pomegranate
 MINIO_SECRET_KEY=pomegranate123
@@ -164,7 +164,7 @@ All endpoints require JWT from Mangosteen except `/health`.
 ### Example: Stock In
 
 ```bash
-curl -X POST http://localhost:8000/stock-in \
+curl -X POST http://localhost:4002/stock-in \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"product_id": 1, "warehouse_id": 1, "quantity": 10, "reference_id": "PO-001"}'
@@ -173,7 +173,7 @@ curl -X POST http://localhost:8000/stock-in \
 ### Example: Bulk Upload
 
 ```bash
-curl -X POST http://localhost:8000/products/bulk-upload \
+curl -X POST http://localhost:4002/products/bulk-upload \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@products.xlsx"
 ```
@@ -182,7 +182,7 @@ curl -X POST http://localhost:8000/products/bulk-upload \
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8000/inventory?sku=PRD-001"
+  "http://localhost:4002/inventory?sku=PRD-001"
 ```
 
 ## Project Structure
